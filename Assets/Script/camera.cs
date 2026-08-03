@@ -26,7 +26,7 @@ public class CameraController : MonoBehaviour
     {
         if (player == null) return;
 
-        // Mouse Look Controls (Task 5)
+        // Mouse Look Controls
         yaw += Input.GetAxis("Mouse X") * mouseSensitivity * Time.deltaTime;
         pitch -= Input.GetAxis("Mouse Y") * mouseSensitivity * Time.deltaTime;
         pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
