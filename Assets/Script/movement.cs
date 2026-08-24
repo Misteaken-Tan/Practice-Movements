@@ -23,8 +23,8 @@ public class Player : MonoBehaviour
     [Header("Crouching Dimensions")]
     public float standingHeight = 2.0f;
     public float crouchingHeight = 1.0f;
-    public Vector3 standingCenter = new Vector3(0, 0, 0);
-    public Vector3 crouchingCenter = new Vector3(0, -0.5f, 0);
+    public Vector3 standingCenter = new Vector3(0, 1f, 0);
+    public Vector3 crouchingCenter = new Vector3(0, 0.5f, 0);
 
     // Stores the player's vertical velocity
     private Vector3 velocity;
@@ -44,11 +44,23 @@ public class Player : MonoBehaviour
 
     void Update()
     {
-        // 1. Check if the player is touching the ground
+        // 1. Ground & Platform Detection (Cast ray from waist down to feet)
         bool grounded = controller.isGrounded;
+        MovingObstacle currentPlatform = null;
+
+        RaycastHit hit;
+        if (Physics.Raycast(transform.position + Vector3.up * 0.5f, Vector3.down, out hit, 1.2f))
+        {
+            if (hit.collider.gameObject != gameObject)
+            {
+                grounded = true;
+                currentPlatform = hit.collider.GetComponent<MovingObstacle>();
+            }
+        }
+
         animator.SetBool("isJumping", !grounded);
 
-        // Prevent gravity from continuously increasing
+        // Prevent gravity buildup when on solid ground or moving surface
         if (grounded && velocity.y < 0)
         {
             velocity.y = -2f;
@@ -70,8 +82,8 @@ public class Player : MonoBehaviour
         }
 
         // 3. Movement Direction Relative to Camera
-        float horizontal = Input.GetAxis("Horizontal");
-        float vertical = Input.GetAxis("Vertical");
+        float horizontal = Input.GetAxisRaw("Horizontal");
+        float vertical = Input.GetAxisRaw("Vertical");
 
         Vector3 forward = cameraTransform.forward;
         Vector3 right = cameraTransform.right;
@@ -98,7 +110,7 @@ public class Player : MonoBehaviour
             );
         }
 
-        // 4. Move the Player
+        // 4. Movement Calculation
         float currentSpeed = moveSpeed;
         if (isCrouching)
         {
@@ -109,18 +121,28 @@ public class Player : MonoBehaviour
             currentSpeed = sprintSpeed;
         }
 
-        controller.Move(move.normalized * currentSpeed * Time.deltaTime);
+        Vector3 horizontalMove = move.normalized * currentSpeed;
 
         // 5. Jump Action
         if (Input.GetButtonDown("Jump") && grounded && !isCrouching)
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
-            grounded = false; // Forces grounded to false immediately
-            animator.SetBool("isJumping", true); // Instantly triggers Jump state
+            grounded = false;
+            currentPlatform = null; // Detach from platform immediately on jump
+            animator.SetBool("isJumping", true);
         }
 
         // Apply Gravity
         velocity.y += gravity * Time.deltaTime;
-        controller.Move(velocity * Time.deltaTime);
+
+        // Execute total player movement
+        Vector3 finalMovement = (horizontalMove + velocity) * Time.deltaTime;
+        controller.Move(finalMovement);
+
+        // 6. Carry player along with Moving Platform (only when grounded)
+        if (grounded && currentPlatform != null)
+        {
+            controller.Move(currentPlatform.PlatformDelta);
+        }
     }
 }

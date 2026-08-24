@@ -2,30 +2,36 @@ using UnityEngine;
 
 public class MovingObstacle : MonoBehaviour
 {
-    [Header("Movement Settings")]
-    public Vector3 moveDirection = new Vector3(3f, 0f, 0f); // Movement direction and distance
-    public float moveSpeed = 2f;
+    [Header("Movement Points")]
+    public Vector3 moveOffset = new Vector3(0f, 0f, 10f);
+    public float speed = 0.5f;
 
-    [Header("Rotation Settings (Optional)")]
-    public Vector3 rotationAxis = new Vector3(0f, 90f, 0f); // Spin speed per second
-
-    private Vector3 startPosition;
+    private Vector3 startPos;
+    private Vector3 targetPos;
+    public Vector3 PlatformDelta { get; private set; }
 
     void Start()
     {
-        startPosition = transform.position;
+        startPos = transform.position;
+        targetPos = startPos + transform.TransformDirection(moveOffset);
     }
 
     void Update()
     {
-        // 1. Move back and forth smoothly between start position and target offset
-        float pingPongFactor = Mathf.PingPong(Time.time * moveSpeed, 1.0f);
-        transform.position = startPosition + (moveDirection * pingPongFactor);
+        float factor = Mathf.PingPong(Time.time * speed, 1f);
+        Vector3 newPos = Vector3.Lerp(startPos, targetPos, Mathf.SmoothStep(0f, 1f, factor));
 
-        // 2. Rotate continuously
-        if (rotationAxis != Vector3.zero)
-        {
-            transform.Rotate(rotationAxis * Time.deltaTime);
-        }
+        // Track exact frame movement
+        PlatformDelta = newPos - transform.position;
+        transform.position = newPos;
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        Vector3 start = Application.isPlaying ? startPos : transform.position;
+        Vector3 end = start + transform.TransformDirection(moveOffset);
+        Gizmos.color = Color.red;
+        Gizmos.DrawLine(start, end);
+        Gizmos.DrawWireCube(end, transform.lossyScale);
     }
 }
