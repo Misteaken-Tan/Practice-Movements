@@ -1,5 +1,6 @@
 using UnityEngine;
 
+[RequireComponent(typeof(CharacterController))]
 public class Player : MonoBehaviour
 {
     // Character Controller component
@@ -17,8 +18,8 @@ public class Player : MonoBehaviour
     public float rotationSpeed = 10f;
 
     [Header("Jumping")]
-    public float jumpHeight = 2f;
-    public float gravity = -9.81f;
+    public float jumpHeight = 2f; //
+    public float gravity = -9.81f; //
 
     [Header("Crouching Dimensions")]
     public float standingHeight = 2.0f;
@@ -26,8 +27,32 @@ public class Player : MonoBehaviour
     public Vector3 standingCenter = new Vector3(0, 1f, 0);
     public Vector3 crouchingCenter = new Vector3(0, 0.5f, 0);
 
+    [Header("Audio Settings")]
+    public AudioSource audioSource; //
+
+    [Header("Footsteps (Requirement 3)")] //
+    // Surface 1: Gravel
+    public AudioClip gravelFootstep; //
+    public AudioClip gravelRunning; //
+    public AudioClip gravelLanding;
+    // Surface 2: Metal
+    public AudioClip metalFootstep; //
+    public AudioClip metalRunning; //
+    public AudioClip metalLanding;
+    // Surface 3: Grass
+    public AudioClip grassFootstep;
+    public AudioClip grassRunning;
+    public AudioClip grassLanding;
+
+    [Header("Jump Vocal & SFX (Requirement 4)")] //
+    public AudioClip jumpGrunt;
+
+    // Audio Timers & Landing Tracker
+    private float footstepTimer; //
+    private bool wasGroundedLastFrame = true;
+
     // Stores the player's vertical velocity
-    private Vector3 velocity;
+    private Vector3 velocity; //
 
     void Start()
     {
@@ -40,6 +65,9 @@ public class Player : MonoBehaviour
 
         if (cameraTransform == null && Camera.main != null)
             cameraTransform = Camera.main.transform;
+
+        if (audioSource == null)
+            audioSource = GetComponent<AudioSource>();
     }
 
     void Update()
@@ -58,7 +86,15 @@ public class Player : MonoBehaviour
             }
         }
 
-        animator.SetBool("isJumping", !grounded);
+        // --- Requirement 5: Landing Sound Effect ---
+        if (!wasGroundedLastFrame && grounded) //[cite: 4]
+        {
+            PlayLanding(hit);
+        }
+        wasGroundedLastFrame = grounded;
+
+        if (animator != null)
+            animator.SetBool("isJumping", !grounded);
 
         // Prevent gravity buildup when on solid ground or moving surface
         if (grounded && velocity.y < 0)
@@ -68,7 +104,8 @@ public class Player : MonoBehaviour
 
         // 2. Crouch Logic
         bool isCrouching = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.C);
-        animator.SetBool("isCrouching", isCrouching);
+        if (animator != null)
+            animator.SetBool("isCrouching", isCrouching);
 
         if (isCrouching)
         {
@@ -96,18 +133,44 @@ public class Player : MonoBehaviour
         bool isMoving = move.magnitude > 0.1f;
         bool isSprinting = isMoving && Input.GetKey(KeyCode.LeftShift) && !isCrouching;
 
-        animator.SetBool("isMoving", isMoving);
-        animator.SetBool("isSprinting", isSprinting);
+        if (animator != null)
+        {
+            animator.SetBool("isMoving", isMoving);
+            animator.SetBool("isSprinting", isSprinting);
+        }
 
         // Rotate player to face movement direction
         if (isMoving)
         {
-            Quaternion targetRotation = Quaternion.LookRotation(move);
-            transform.rotation = Quaternion.Slerp(
-                transform.rotation,
-                targetRotation,
-                rotationSpeed * Time.deltaTime
-            );
+            Quaternion targetRotation = Quaternion.LookRotation(move); //
+            transform.rotation = Quaternion.Slerp( //
+                transform.rotation, //
+                targetRotation, //
+                rotationSpeed * Time.deltaTime //
+            ); //
+        }
+
+        // --- Requirement 3: Surface-Based Footsteps ---
+        if (isMoving && grounded) //[cite: 4]
+        {
+            footstepTimer -= Time.deltaTime; //
+
+            if (footstepTimer <= 0f) //
+            {
+                PlayFootstep(isSprinting, hit); //
+
+                // Footstep cadence
+                if (isSprinting) //
+                    footstepTimer = 0.3f; //
+                else if (isCrouching)
+                    footstepTimer = 0.65f;
+                else
+                    footstepTimer = 0.48f; //
+            }
+        }
+        else
+        {
+            footstepTimer = 0f; //
         }
 
         // 4. Movement Calculation
@@ -123,13 +186,21 @@ public class Player : MonoBehaviour
 
         Vector3 horizontalMove = move.normalized * currentSpeed;
 
-        // 5. Jump Action
-        if (Input.GetButtonDown("Jump") && grounded && !isCrouching)
+        // 5. Jump Action & Requirement 4: Jump Vocal Grunt
+        if (Input.GetButtonDown("Jump") && grounded && !isCrouching) //[cite: 4]
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
             grounded = false;
             currentPlatform = null; // Detach from platform immediately on jump
-            animator.SetBool("isJumping", true);
+
+            if (animator != null)
+                animator.SetBool("isJumping", true);
+
+            // Play Jump Grunt
+            if (audioSource != null && jumpGrunt != null) //[cite: 4]
+            {
+                audioSource.PlayOneShot(jumpGrunt); //[cite: 4]
+            }
         }
 
         // Apply Gravity
@@ -143,6 +214,47 @@ public class Player : MonoBehaviour
         if (grounded && currentPlatform != null)
         {
             controller.Move(currentPlatform.PlatformDelta);
+        }
+    }
+
+    // Plays walking or running audio depending on the ground surface Tag
+    void PlayFootstep(bool running, RaycastHit groundHit) //[cite: 4]
+    {
+        if (audioSource == null || groundHit.collider == null) return;
+
+        // Surface 1: Gravel
+        if (groundHit.collider.CompareTag("Gravel")) //
+        {
+            audioSource.PlayOneShot(running ? gravelRunning : gravelFootstep); //
+        }
+        // Surface 2: Metal
+        else if (groundHit.collider.CompareTag("Concrete")) //
+        {
+            audioSource.PlayOneShot(running ? metalRunning : metalFootstep); //
+        }
+        // Surface 3: Grass
+        else if (groundHit.collider.CompareTag("Water"))
+        {
+            audioSource.PlayOneShot(running ? grassRunning : grassFootstep);
+        }
+    }
+
+    // Plays landing impact audio matching the ground surface Tag
+    void PlayLanding(RaycastHit groundHit) //[cite: 4]
+    {
+        if (audioSource == null || groundHit.collider == null) return;
+
+        if (groundHit.collider.CompareTag("Gravel") && gravelLanding != null)
+        {
+            audioSource.PlayOneShot(gravelLanding);
+        }
+        else if (groundHit.collider.CompareTag("Concrete") && metalLanding != null)
+        {
+            audioSource.PlayOneShot(metalLanding);
+        }
+        else if (groundHit.collider.CompareTag("Water") && grassLanding != null)
+        {
+            audioSource.PlayOneShot(grassLanding);
         }
     }
 }
