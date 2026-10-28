@@ -2,41 +2,38 @@ using UnityEngine;
 
 public class CameraController : MonoBehaviour
 {
-    public Transform player;
-    public Vector3 offset = new Vector3(0f, 1.5f, -4f);
-    public float mouseSensitivity = 200f;
-    public float minPitch = -20f;
-    public float maxPitch = 60f;
+    public Transform playerBody;
+    public float mouseSensitivity = 100f;
+    public float minPitch = -80f;
+    public float maxPitch = 80f;
 
-    private float yaw;
-    private float pitch = 10f; // Slight downward angle looking at the character
+    private float xRotation = 0f;
 
     void Start()
     {
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
-        // Initialize yaw to match the player's facing rotation
-        if (player != null)
+        if (playerBody == null && transform.parent != null)
         {
-            yaw = player.eulerAngles.y;
+            playerBody = transform.parent;
         }
     }
 
-    void LateUpdate()
+    void Update()
     {
-        if (player == null) return;
+        float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity * Time.deltaTime;
+        float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity * Time.deltaTime;
 
-        // Mouse Orbit Input
-        yaw += Input.GetAxis("Mouse X") * mouseSensitivity * Time.deltaTime;
-        pitch -= Input.GetAxis("Mouse Y") * mouseSensitivity * Time.deltaTime;
-        pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
+        // Up/down pitch on camera
+        xRotation -= mouseY;
+        xRotation = Mathf.Clamp(xRotation, minPitch, maxPitch);
+        transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
 
-        // Position camera behind player based on yaw & pitch
-        Quaternion rotation = Quaternion.Euler(pitch, yaw, 0f);
-        transform.position = player.position + rotation * offset;
-
-        // Focus camera on the character's center/chest
-        transform.LookAt(player.position + Vector3.up * 1.0f);
+        // Left/right yaw on the player body
+        if (playerBody != null)
+        {
+            playerBody.Rotate(Vector3.up * mouseX);
+        }
     }
 }

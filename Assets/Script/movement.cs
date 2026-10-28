@@ -1,13 +1,9 @@
 using UnityEngine;
 
 [RequireComponent(typeof(CharacterController))]
-public class Player : MonoBehaviour
+public class movement : MonoBehaviour
 {
-    // Character Controller component
     public CharacterController controller;
-
-    // Reference to the camera
-    public Transform cameraTransform;
 
     private Animator animator;
 
@@ -15,11 +11,10 @@ public class Player : MonoBehaviour
     public float moveSpeed = 5f;
     public float sprintSpeed = 15f;
     public float crouchSpeed = 2.5f;
-    public float rotationSpeed = 10f;
 
     [Header("Jumping")]
-    public float jumpHeight = 2f; //
-    public float gravity = -9.81f; //
+    public float jumpHeight = 2f;
+    public float gravity = -9.81f;
 
     [Header("Crouching Dimensions")]
     public float standingHeight = 2.0f;
@@ -28,43 +23,39 @@ public class Player : MonoBehaviour
     public Vector3 crouchingCenter = new Vector3(0, 0.5f, 0);
 
     [Header("Audio Settings")]
-    public AudioSource audioSource; //
+    public AudioSource audioSource;
 
-    [Header("Footsteps (Requirement 3)")] //
+    [Header("Footsteps (Requirement 3)")]
     // Surface 1: Gravel
-    public AudioClip gravelFootstep; //
-    public AudioClip gravelRunning; //
+    public AudioClip gravelFootstep;
+    public AudioClip gravelRunning;
     public AudioClip gravelLanding;
-    // Surface 2: Metal
-    public AudioClip metalFootstep; //
-    public AudioClip metalRunning; //
+    // Surface 2: Metal / Concrete
+    public AudioClip metalFootstep;
+    public AudioClip metalRunning;
     public AudioClip metalLanding;
-    // Surface 3: Grass
+    // Surface 3: Grass / Water
     public AudioClip grassFootstep;
     public AudioClip grassRunning;
     public AudioClip grassLanding;
 
-    [Header("Jump Vocal & SFX (Requirement 4)")] //
+    [Header("Jump Vocal & SFX (Requirement 4)")]
     public AudioClip jumpGrunt;
 
     // Audio Timers & Landing Tracker
-    private float footstepTimer; //
+    private float footstepTimer;
     private bool wasGroundedLastFrame = true;
 
     // Stores the player's vertical velocity
-    private Vector3 velocity; //
+    private Vector3 velocity;
 
     void Start()
     {
-        // Auto-assign components if not dragged in Inspector
         if (controller == null)
             controller = GetComponent<CharacterController>();
 
         if (animator == null)
             animator = GetComponentInChildren<Animator>();
-
-        if (cameraTransform == null && Camera.main != null)
-            cameraTransform = Camera.main.transform;
 
         if (audioSource == null)
             audioSource = GetComponent<AudioSource>();
@@ -72,7 +63,7 @@ public class Player : MonoBehaviour
 
     void Update()
     {
-        // 1. Ground & Platform Detection (Cast ray from waist down to feet)
+        // 1. Ground & Platform Detection
         bool grounded = controller.isGrounded;
         MovingObstacle currentPlatform = null;
 
@@ -87,7 +78,7 @@ public class Player : MonoBehaviour
         }
 
         // --- Requirement 5: Landing Sound Effect ---
-        if (!wasGroundedLastFrame && grounded) //[cite: 4]
+        if (!wasGroundedLastFrame && grounded && velocity.y < -1.5f)
         {
             PlayLanding(hit);
         }
@@ -96,7 +87,6 @@ public class Player : MonoBehaviour
         if (animator != null)
             animator.SetBool("isJumping", !grounded);
 
-        // Prevent gravity buildup when on solid ground or moving surface
         if (grounded && velocity.y < 0)
         {
             velocity.y = -2f;
@@ -118,18 +108,12 @@ public class Player : MonoBehaviour
             controller.center = standingCenter;
         }
 
-        // 3. Movement Direction Relative to Camera
+        // 3. First-Person Movement Vector (Body-Relative Strafing)
         float horizontal = Input.GetAxisRaw("Horizontal");
         float vertical = Input.GetAxisRaw("Vertical");
 
-        Vector3 forward = cameraTransform.forward;
-        Vector3 right = cameraTransform.right;
-        forward.y = 0f;
-        right.y = 0f;
-        forward.Normalize();
-        right.Normalize();
-
-        Vector3 move = forward * vertical + right * horizontal;
+        // Moves relative to where the player is currently facing (set by mouse)
+        Vector3 move = (transform.forward * vertical + transform.right * horizontal).normalized;
         bool isMoving = move.magnitude > 0.1f;
         bool isSprinting = isMoving && Input.GetKey(KeyCode.LeftShift) && !isCrouching;
 
@@ -139,67 +123,53 @@ public class Player : MonoBehaviour
             animator.SetBool("isSprinting", isSprinting);
         }
 
-        // Rotate player to face movement direction
-        if (isMoving)
-        {
-            Quaternion targetRotation = Quaternion.LookRotation(move); //
-            transform.rotation = Quaternion.Slerp( //
-                transform.rotation, //
-                targetRotation, //
-                rotationSpeed * Time.deltaTime //
-            ); //
-        }
+        // --- (Conflicting Quaternion.Slerp rotation code removed) ---
 
         // --- Requirement 3: Surface-Based Footsteps ---
-        if (isMoving && grounded) //[cite: 4]
+        if (isMoving && grounded)
         {
-            footstepTimer -= Time.deltaTime; //
+            footstepTimer -= Time.deltaTime;
 
-            if (footstepTimer <= 0f) //
+            if (footstepTimer <= 0f)
             {
-                PlayFootstep(isSprinting, hit); //
+                PlayFootstep(isSprinting, hit);
 
-                // Footstep cadence
-                if (isSprinting) //
-                    footstepTimer = 0.3f; //
+                if (isSprinting)
+                    footstepTimer = 0.3f;
                 else if (isCrouching)
                     footstepTimer = 0.65f;
                 else
-                    footstepTimer = 0.48f; //
+                    footstepTimer = 0.48f;
             }
         }
         else
         {
-            footstepTimer = 0f; //
+            footstepTimer = 0f;
         }
 
         // 4. Movement Calculation
         float currentSpeed = moveSpeed;
         if (isCrouching)
-        {
             currentSpeed = crouchSpeed;
-        }
         else if (isSprinting)
-        {
             currentSpeed = sprintSpeed;
-        }
 
-        Vector3 horizontalMove = move.normalized * currentSpeed;
+        Vector3 horizontalMove = move * currentSpeed;
 
-        // 5. Jump Action & Requirement 4: Jump Vocal Grunt
-        if (Input.GetButtonDown("Jump") && grounded && !isCrouching) //[cite: 4]
+        // 5. Jump Action & Vocal Grunt
+        if (Input.GetButtonDown("Jump") && grounded && !isCrouching)
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
             grounded = false;
-            currentPlatform = null; // Detach from platform immediately on jump
+            wasGroundedLastFrame = false;
+            currentPlatform = null;
 
             if (animator != null)
                 animator.SetBool("isJumping", true);
 
-            // Play Jump Grunt
-            if (audioSource != null && jumpGrunt != null) //[cite: 4]
+            if (audioSource != null && jumpGrunt != null)
             {
-                audioSource.PlayOneShot(jumpGrunt); //[cite: 4]
+                audioSource.PlayOneShot(jumpGrunt);
             }
         }
 
@@ -210,49 +180,55 @@ public class Player : MonoBehaviour
         Vector3 finalMovement = (horizontalMove + velocity) * Time.deltaTime;
         controller.Move(finalMovement);
 
-        // 6. Carry player along with Moving Platform (only when grounded)
+        // 6. Carry player along with Moving Platform
         if (grounded && currentPlatform != null)
         {
             controller.Move(currentPlatform.PlatformDelta);
         }
     }
 
-    // Plays walking or running audio depending on the ground surface Tag
-    void PlayFootstep(bool running, RaycastHit groundHit) //[cite: 4]
+    void PlayFootstep(bool running, RaycastHit groundHit)
     {
         if (audioSource == null || groundHit.collider == null) return;
 
-        // Surface 1: Gravel
-        if (groundHit.collider.CompareTag("Gravel")) //
+        if (groundHit.collider.CompareTag("Gravel"))
         {
-            audioSource.PlayOneShot(running ? gravelRunning : gravelFootstep); //
+            audioSource.PlayOneShot(running ? gravelRunning : gravelFootstep);
         }
-        // Surface 2: Metal
-        else if (groundHit.collider.CompareTag("Concrete")) //
+        else if (groundHit.collider.CompareTag("Concrete"))
         {
-            audioSource.PlayOneShot(running ? metalRunning : metalFootstep); //
+            audioSource.PlayOneShot(running ? metalRunning : metalFootstep);
         }
-        // Surface 3: Grass
         else if (groundHit.collider.CompareTag("Water"))
         {
             audioSource.PlayOneShot(running ? grassRunning : grassFootstep);
         }
     }
 
-    // Plays landing impact audio matching the ground surface Tag
-    void PlayLanding(RaycastHit groundHit) //[cite: 4]
+    void PlayLanding(RaycastHit groundHit)
     {
-        if (audioSource == null || groundHit.collider == null) return;
+        if (audioSource == null) return;
 
-        if (groundHit.collider.CompareTag("Gravel") && gravelLanding != null)
+        Collider hitCollider = groundHit.collider;
+        if (hitCollider == null)
+        {
+            if (Physics.Raycast(transform.position + Vector3.up * 0.5f, Vector3.down, out RaycastHit backupHit, 1.5f))
+            {
+                hitCollider = backupHit.collider;
+            }
+        }
+
+        if (hitCollider == null) return;
+
+        if (hitCollider.CompareTag("Gravel") && gravelLanding != null)
         {
             audioSource.PlayOneShot(gravelLanding);
         }
-        else if (groundHit.collider.CompareTag("Concrete") && metalLanding != null)
+        else if (hitCollider.CompareTag("Concrete") && metalLanding != null)
         {
             audioSource.PlayOneShot(metalLanding);
         }
-        else if (groundHit.collider.CompareTag("Water") && grassLanding != null)
+        else if (hitCollider.CompareTag("Water") && grassLanding != null)
         {
             audioSource.PlayOneShot(grassLanding);
         }
